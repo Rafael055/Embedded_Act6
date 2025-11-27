@@ -58,12 +58,6 @@ header {
   z-index: 2;
 }
 
-.satellite-icon {
-  font-size: 4rem;
-  margin-bottom: 10px;
-  animation: float 3s ease-in-out infinite;
-  filter: drop-shadow(0 0 20px rgba(0, 162, 255, 0.8));
-}
 
 @keyframes float {
   0%, 100% { transform: translateY(0px); }
@@ -486,9 +480,7 @@ header {
     letter-spacing: 2px;
   }
   
-  .satellite-icon {
-    font-size: 3rem;
-  }
+
 
   .card-header h2 {
     font-size: 1.1rem;
