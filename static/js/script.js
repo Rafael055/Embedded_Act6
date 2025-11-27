@@ -16,6 +16,11 @@ let accelData = {
 };
 const MAX_DATA_POINTS = 50;
 
+// Voice Assistant variables
+let speechSynthesis = window.speechSynthesis;
+let voiceEnabled = true;
+let isSpeaking = false;
+
 // Initialize map
 function initMap() {
   // Create map centered on default location
@@ -309,6 +314,103 @@ function startAccelUpdates() {
   setInterval(fetchCurrentAccel, 200); // Update every 200ms for smoother graph
 }
 
+// Voice Assistant Functions
+function speak(text) {
+  if (!voiceEnabled || !speechSynthesis) {
+    console.log('Speech synthesis not available or disabled');
+    return;
+  }
+
+  // Cancel any ongoing speech
+  speechSynthesis.cancel();
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = 1.0;
+  utterance.pitch = 1.0;
+  utterance.volume = 1.0;
+
+  // Try to use an English voice
+  const voices = speechSynthesis.getVoices();
+  const englishVoice = voices.find(voice => voice.lang.startsWith('en'));
+  if (englishVoice) {
+    utterance.voice = englishVoice;
+  }
+
+  utterance.onstart = () => {
+    isSpeaking = true;
+    updateVoiceStatus('Speaking...', true);
+  };
+
+  utterance.onend = () => {
+    isSpeaking = false;
+    updateVoiceStatus('Ready', false);
+  };
+
+  utterance.onerror = (event) => {
+    console.error('Speech error:', event.error);
+    isSpeaking = false;
+    updateVoiceStatus('Error', false);
+  };
+
+  speechSynthesis.speak(utterance);
+  console.log('Voice:', text);
+}
+
+// Update voice status indicator
+function updateVoiceStatus(status, active) {
+  const indicator = document.getElementById('voice-indicator');
+  if (indicator) {
+    indicator.textContent = status;
+    indicator.className = active ? 'voice-active' : 'voice-idle';
+  }
+}
+
+// Fetch voice notifications from server
+async function fetchVoiceNotification() {
+  if (!voiceEnabled) return;
+
+  try {
+    const response = await fetch('/api/voice/notification');
+    const result = await response.json();
+
+    if (result.success && result.notification) {
+      speak(result.notification);
+    }
+  } catch (error) {
+    console.error('Error fetching voice notification:', error);
+  }
+}
+
+// Toggle voice assistant
+function toggleVoice() {
+  voiceEnabled = !voiceEnabled;
+  const btn = document.getElementById('voice-toggle');
+  if (btn) {
+    btn.textContent = voiceEnabled ? '🔊 Voice ON' : '🔇 Voice OFF';
+    btn.className = voiceEnabled ? 'btn voice-on' : 'btn voice-off';
+  }
+
+  if (!voiceEnabled) {
+    speechSynthesis.cancel();
+  } else {
+    speak('Voice assistant enabled');
+  }
+}
+
+// Start voice notification polling
+function startVoiceUpdates() {
+  // Load voices (needed for some browsers)
+  if (speechSynthesis) {
+    speechSynthesis.getVoices();
+    speechSynthesis.onvoiceschanged = () => {
+      speechSynthesis.getVoices();
+    };
+  }
+
+  // Poll for voice notifications every 500ms
+  setInterval(fetchVoiceNotification, 500);
+}
+
 // Initialize on page load
 window.addEventListener('DOMContentLoaded', () => {
   console.log('GPS Tracker initialized');
@@ -316,4 +418,5 @@ window.addEventListener('DOMContentLoaded', () => {
   initAccelChart();
   startGPSUpdates();
   startAccelUpdates();
+  startVoiceUpdates();
 });

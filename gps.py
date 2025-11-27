@@ -40,14 +40,25 @@ class GPS:
     def parse_nmea(self, sentence):
         """Parse NMEA sentence from GPS"""
         try:
+            # Parse GGA sentences (contains fix quality, satellites, and position)
             if sentence.startswith('$GPGGA') or sentence.startswith('$GNGGA'):
                 msg = pynmea2.parse(sentence)
+                
+                # Always update satellite count and fix quality, even without position
+                if msg.num_sats:
+                    try:
+                        self.current_data['satellites'] = int(msg.num_sats)
+                    except (ValueError, TypeError):
+                        pass
+                
+                if msg.gps_qual is not None:
+                    self.current_data['fix_quality'] = msg.gps_qual
+                
+                # Only update position if we have valid coordinates
                 if msg.latitude and msg.longitude:
                     self.current_data['latitude'] = msg.latitude
                     self.current_data['longitude'] = msg.longitude
                     self.current_data['altitude'] = msg.altitude
-                    self.current_data['fix_quality'] = msg.gps_qual
-                    self.current_data['satellites'] = msg.num_sats
                     
                     # Add to location history for trail
                     self.location_history.append({
@@ -59,6 +70,19 @@ class GPS:
                     # Keep only last 1000 points
                     if len(self.location_history) > 1000:
                         self.location_history.pop(0)
+            
+            # Parse GSV sentences (satellites in view - more accurate count)
+            elif sentence.startswith('$GPGSV') or sentence.startswith('$GNGSV'):
+                parts = sentence.split(',')
+                if len(parts) > 3 and parts[3]:
+                    try:
+                        sats_in_view = int(parts[3])
+                        # Update if this shows more satellites
+                        if sats_in_view > self.current_data['satellites']:
+                            self.current_data['satellites'] = sats_in_view
+                    except (ValueError, TypeError):
+                        pass
+                        
         except Exception as e:
             pass
     

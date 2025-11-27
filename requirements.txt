@@ -5,3 +5,7 @@ luma.oled==3.14.0
 pillow==11.0.0
 smbus2==0.5.0
 RPi.GPIO==0.7.1
+pyttsx3==2.90
+
+# Note: For voice assistant, you also need espeak installed:
+# sudo apt-get install espeak
