@@ -262,4 +262,3 @@ class GPSVoiceMonitor:
 # Global instances
 voice_assistant = VoiceAssistant()
 gps_voice_monitor = None  # Will be initialized in app.py with GPS module
-
