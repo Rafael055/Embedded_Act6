@@ -1,21 +1,27 @@
 import threading
 import time
+import board
+import busio
+from PIL import Image, ImageDraw, ImageFont
+import adafruit_ssd1306
 
-# Try to import OLED hardware libraries
+# Try to initialize OLED with Adafruit library
+OLED_AVAILABLE = False
+
 try:
-    from luma.core.interface.serial import i2c
-    from luma.oled.device import ssd1306
-    from PIL import Image, ImageDraw, ImageFont
+    # Initialize I2C
+    i2c = busio.I2C(board.SCL, board.SDA)
+    print("I2C initialized successfully")
     OLED_AVAILABLE = True
-except ImportError as e:
-    print(f"OLED hardware libraries not available: {e}")
+except Exception as e:
+    print(f"Failed to initialize I2C: {e}")
     print("Running in OLED simulation mode")
     OLED_AVAILABLE = False
 
 class OLEDDisplay:
     def __init__(self, width=128, height=64, address=0x3C):
         """
-        Initialize OLED display (SSD1306)
+        Initialize OLED display (SSD1306) using Adafruit library
         Default I2C address is 0x3C for most OLED displays
         """
         self.width = width
@@ -33,16 +39,19 @@ class OLEDDisplay:
             return True
             
         try:
-            # Create I2C interface (port=1 is default for Raspberry Pi)
-            serial = i2c(port=1, address=self.address)
-            
-            # Create OLED display object
-            self.display = ssd1306(serial, width=self.width, height=self.height)
+            # Create the SSD1306 OLED class
+            self.display = adafruit_ssd1306.SSD1306_I2C(
+                self.width, 
+                self.height, 
+                i2c, 
+                addr=self.address
+            )
             
             # Clear display
-            self.display.clear()
+            self.display.fill(0)
+            self.display.show()
             
-            print("OLED display initialized successfully!")
+            print("✓ OLED display initialized successfully with Adafruit library!")
             return True
             
         except Exception as e:
@@ -58,9 +67,29 @@ class OLEDDisplay:
         if not OLED_AVAILABLE or not self.display:
             # Simulation mode - print to console
             if self.gps_data:
+                lat = self.gps_data.get('latitude', 'N/A')
+                lon = self.gps_data.get('longitude', 'N/A')
                 alt = self.gps_data.get('altitude', 'N/A')
-                alt_str = f"{alt:.1f}m" if alt != 'N/A' and alt is not None else 'N/A'
-                print(f"\r[OLED] Lat: {self.gps_data.get('latitude', 'N/A')} | Lon: {self.gps_data.get('longitude', 'N/A')} | Alt: {alt_str}", end='')
+                sats = self.gps_data.get('satellites', 0)
+                has_fix = self.gps_data.get('has_fix', False)
+                
+                if lat != 'N/A' and isinstance(lat, (int, float)):
+                    lat_str = f"{lat:.6f}"
+                else:
+                    lat_str = str(lat)
+                    
+                if lon != 'N/A' and isinstance(lon, (int, float)):
+                    lon_str = f"{lon:.6f}"
+                else:
+                    lon_str = str(lon)
+                    
+                if alt != 'N/A' and isinstance(alt, (int, float)):
+                    alt_str = f"{alt:.1f}m"
+                else:
+                    alt_str = "N/A"
+                
+                status = "FIX" if has_fix else "NO FIX"
+                print(f"\r[OLED] {status} | Lat: {lat_str} | Lon: {lon_str} | Alt: {alt_str} | Sats: {sats}", end='', flush=True)
             return
         
         try:
@@ -78,6 +107,7 @@ class OLEDDisplay:
                 # Display GPS coordinates
                 lat = self.gps_data.get('latitude')
                 lon = self.gps_data.get('longitude')
+                alt = self.gps_data.get('altitude')
                 sats = self.gps_data.get('satellites', 0)
                 
                 # Title
@@ -95,26 +125,29 @@ class OLEDDisplay:
                     draw.text((0, 30), lon_str, font=font, fill=255)
                 
                 # Altitude
-                alt = self.gps_data.get('altitude')
                 if alt is not None:
                     alt_str = f"Alt: {alt:.1f}m"
                     draw.text((0, 44), alt_str, font=font, fill=255)
                 else:
                     draw.text((0, 44), "Alt: N/A", font=font, fill=255)
+                
+                # Satellites
+                sat_str = f"Sats: {sats}"
+                draw.text((0, 54), sat_str, font=font, fill=255)
             else:
                 # No GPS fix
                 draw.text((0, 0), "GPS Tracker", font=font, fill=255)
                 draw.line((0, 12, self.width, 12), fill=255)
                 draw.text((0, 20), "Waiting for", font=font, fill=255)
                 draw.text((0, 35), "GPS signal...", font=font, fill=255)
-                
                 draw.text((0, 50), "Alt: N/A", font=font, fill=255)
             
-            # Display the image (luma uses display() method)
-            self.display.display(image)
+            # Display the image on OLED
+            self.display.image(image)
+            self.display.show()
             
         except Exception as e:
-            print(f"Error drawing on OLED: {e}")
+            print(f"\nError drawing on OLED: {e}")
     
     def display_loop(self):
         """Background loop to update display"""
@@ -123,7 +156,7 @@ class OLEDDisplay:
                 self.draw_gps_info()
                 time.sleep(1)
             except Exception as e:
-                print(f"Error in display loop: {e}")
+                print(f"\nError in display loop: {e}")
                 time.sleep(1)
     
     def start(self):
@@ -135,7 +168,11 @@ class OLEDDisplay:
         self.running = True
         self.thread = threading.Thread(target=self.display_loop, daemon=True)
         self.thread.start()
-        print("OLED display thread started")
+        
+        if OLED_AVAILABLE:
+            print("OLED display thread started (Adafruit hardware mode)")
+        else:
+            print("OLED display thread started (simulation mode)")
         return True
     
     def stop(self):
@@ -145,10 +182,11 @@ class OLEDDisplay:
             self.thread.join(timeout=2)
         if self.display and OLED_AVAILABLE:
             try:
-                self.display.clear()
+                self.display.fill(0)
+                self.display.show()
             except:
                 pass  # Ignore cleanup errors
-        print("OLED display stopped")
+        print("\nOLED display stopped")
 
 # Global OLED display instance
 oled_display = OLEDDisplay()
