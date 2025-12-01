@@ -119,8 +119,8 @@ class VoiceAssistant:
         self.speak("GPS Searching")
     
     def speak_movement_detected(self, meters=5):
-        """Announce that user has moved from original location"""
-        self.speak(f"You moved {meters} meters from your original location")
+        """Announce that user has moved from previous location"""
+        self.speak(f"You moved {meters} meters from your previous location")
     
     def speak_gps_locked(self):
         """Announce GPS has locked onto satellites"""
